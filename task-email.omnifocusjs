@@ -1,0 +1,111 @@
+/*{
+  "type": "action",
+  "targets": ["omnifocus"]
+}*/
+
+(() => {
+    // Configuration: Default tag group name for customer contacts
+    const DEFAULT_TAG_GROUP_NAME = 'Ansprechpartner';
+    
+    const action = new PlugIn.Action(function (selection, sender) {
+        const task = selection.tasks.length > 0 ? selection.tasks[0] : null;
+        
+        if (!task) {
+            new Alert(
+                "No Task Selected", 
+                "Please select a task for which you want to create an email."
+            ).show();
+            return;
+        }
+
+        // Function to process email creation
+        function createEmail(tagGroupName) {
+            // Collect email addresses from tags in the specified tag group
+            const emailRecipients = [];
+            const targetTagGroup = flattenedTags.byName(tagGroupName) || null;
+            
+            if (targetTagGroup) {
+                // Iterate through the task's tags
+                task.tags.forEach(tag => {
+                    // Check if the tag is a child of the specified tag group
+                    let parentTag = tag.parent;
+                    while (parentTag) {
+                        if (parentTag === targetTagGroup) {
+                            const tagName = tag.name;
+                            
+                            const emailRegex = /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/;
+                            if (emailRegex.test(tagName)) {
+                                emailRecipients.push(tagName);
+                            }
+                            break;
+                        }
+                        parentTag = parentTag.parent;
+                    }
+                });
+            }
+
+            // Create email subject
+            const subject = `Task ${task.name}`;
+            
+            // Create email body with task details
+            let body =`Task: ${task.name}\n`; 
+
+            if (task.note && task.note.trim() !== '') {
+                body += `Details: ${task.note}\n`;
+            }
+            
+            if (task.project) {
+                body += `Project: ${task.project.name}\n`;
+            }
+            
+            if (task.dueDate) {
+                body += `Due Date: ${task.dueDate.toLocaleDateString('en-US')}\n`;
+            }
+            
+            // Create mailto URL
+            let mailtoURL = 'mailto:';
+            
+            if (emailRecipients.length > 0) {
+                mailtoURL += emailRecipients.join(',');
+            }
+            
+            mailtoURL += `?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+            
+            try {
+                URL.fromString(mailtoURL).open();
+            } catch (error) {
+                new Alert(
+                    "Error Opening Email",
+                    `Error: ${error.message}\n\nFound Recipients: ${emailRecipients.length > 0 ? emailRecipients.join(', ') : 'None'}\n\nUsed Tag Group: ${tagGroupName}`
+                ).show();
+            }
+        }
+
+        // Check if Option key is pressed for configuration mode
+        if (sender.modifierKeys && sender.modifierKeys.optionKey) {
+            // Show configuration dialog
+            const inputForm = new Form();
+            inputForm.addField(new Form.Field.String("tagGroup", "Tag Group Name", DEFAULT_TAG_GROUP_NAME));
+            
+            const formPromise = inputForm.show("Email Tag Configuration", "Configure which tag group contains customer contacts:");
+            
+            formPromise.then(function(formObject) {
+                const tagGroupName = formObject.get("tagGroup") || DEFAULT_TAG_GROUP_NAME;
+                createEmail(tagGroupName);
+            }).catch(function(error) {
+                // User cancelled the form
+                console.log("User cancelled tag group configuration");
+            });
+        } else {
+            // Use default tag group and create email immediately
+            createEmail(DEFAULT_TAG_GROUP_NAME);
+        }
+    });
+
+    action.validate = function (selection, sender) {
+        // Action is only available when exactly one task is selected
+        return selection.tasks.length === 1 && selection.projects.length === 0;
+    };
+
+    return action;
+})();

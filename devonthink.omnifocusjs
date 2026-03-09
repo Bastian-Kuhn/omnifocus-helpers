@@ -1,0 +1,46 @@
+/*{
+  "type": "action",
+  "targets": ["omnifocus"]
+}*/
+
+(() => {
+    const action = new PlugIn.Action(function (selection, sender) {
+    const task = selection.tasks.length > 0 ? selection.tasks[0] : null;
+    const project = (!task && selection.projects.length > 0) ? selection.projects[0] : null;
+
+    if (!task && !project) {
+      new Alert(
+        "No Selection",
+        "Choose Project"
+      ).show();
+      return;
+    }
+
+    const item = task || project;
+    const itemType = task ? "Task" : "Projekt";
+    const name = item.name;
+
+    // Escape special characters for URL
+    const encodedName = encodeURIComponent(name);
+    const dbID = "F678F6D3-ED1D-48DB-9ACA-1F6CD62CA637" 
+    
+    const devonthinkURL = `x-devonthink://creategroup?title=${encodedName}&destination=${dbID}`;
+    
+    try {
+      URL.fromString(devonthinkURL).open();
+    } catch (error) {
+      new Alert(
+        ` Error: ${error.message}`
+      ).show();
+    }
+
+  });
+
+  action.validate = function (selection, sender) {
+    const hasOneTask = selection.tasks.length === 1 && selection.projects.length === 0;
+    const hasOneProject = selection.projects.length === 1 && selection.tasks.length === 0;
+    return hasOneTask || hasOneProject;
+  };
+
+  return action;
+})();
