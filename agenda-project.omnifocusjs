@@ -1,0 +1,84 @@
+/*{
+  "type": "action",
+  "targets": ["omnifocus"]
+}*/
+
+(() => {
+    const action = new PlugIn.Action(function (selection, sender) {
+        const task = selection.tasks.length > 0 ? selection.tasks[0] : null;
+        const project = selection.projects.length > 0 ? selection.projects[0] : null;
+
+        if (!task && !project) {
+            new Alert(
+                "No Item Selected",
+                "Please select a single task or project first."
+            ).show();
+            return;
+        }
+
+        // Prefer task names when a task is selected; otherwise use project name.
+        const sourceItemName = task ? task.name : project.name;
+        const projectTitle = (sourceItemName || "").trim();
+        if (!projectTitle) {
+            new Alert(
+                "Item Has No Title",
+                "The selected task/project has an empty title, so no Agenda project can be targeted."
+            ).show();
+            return;
+        }
+
+        const encodedTitle = encodeURIComponent(projectTitle);
+
+        const openURL = URL.fromString(
+            `agenda://x-callback-url/open-project?title=${encodedTitle}`
+        );
+
+        const createURL = URL.fromString(
+            `agenda://x-callback-url/create-project?title=${encodedTitle}&select=true`
+        );
+
+        if (!openURL || !createURL) {
+            new Alert(
+                "URL Error",
+                "Could not build the Agenda callback URLs."
+            ).show();
+            return;
+        }
+
+        // First try to open the project. If not found, create and select it.
+        openURL.call(
+            () => {
+                console.log(`Opened Agenda project: ${projectTitle}`);
+            },
+            err => {
+                if (String(err.errorCode) === "404") {
+                    createURL.call(
+                        () => {
+                            console.log(`Created Agenda project: ${projectTitle}`);
+                        },
+                        createErr => {
+                            new Alert(
+                                "Agenda Create Failed",
+                                `${createErr.errorMessage || "Unknown error"} (code: ${createErr.errorCode || "n/a"})`
+                            ).show();
+                        }
+                    );
+                    return;
+                }
+
+                new Alert(
+                    "Agenda Open Failed",
+                    `${err.errorMessage || "Unknown error"} (code: ${err.errorCode || "n/a"})`
+                ).show();
+            }
+        );
+    });
+
+    action.validate = function (selection, sender) {
+        const oneTaskSelected = selection.tasks.length === 1;
+        const oneProjectSelected = selection.tasks.length === 0 && selection.projects.length === 1;
+        return oneTaskSelected || oneProjectSelected;
+    };
+
+    return action;
+})();
