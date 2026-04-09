@@ -1,0 +1,89 @@
+/*{
+  "type": "action",
+  "targets": ["omnifocus"]
+}*/
+
+(() => {
+    const action = new PlugIn.Action(function (selection, sender) {
+        const task = selection.tasks.length > 0 ? selection.tasks[0] : null;
+        const project = selection.projects.length > 0 ? selection.projects[0] : null;
+
+        if (!task && !project) {
+            new Alert(
+                "No Item Selected",
+                "Please select a single task or project first."
+            ).show();
+            return;
+        }
+
+        // Optional: set this to your Obsidian vault name. Leave empty to use the default vault behavior.
+        const OBSIDIAN_VAULT_NAME = "Notes";
+        // Optional: target folder path inside your vault, e.g. "Projects/OmniFocus".
+        const OBSIDIAN_FOLDER_PATH = "02 - Projects/";
+
+        // Prefer task names when a task is selected; otherwise use project name.
+        const sourceItemName = task ? task.name : project.name;
+        const noteTitle = (sourceItemName || "").trim();
+        if (!noteTitle) {
+            new Alert(
+                "Item Has No Title",
+                "The selected task/project has an empty title, so no Obsidian note can be targeted."
+            ).show();
+            return;
+        }
+
+        // Keep folders from config, but sanitize the final note file name.
+        const sanitizedNoteName = noteTitle
+            .replace(/[\\/:]/g, "-")
+            .replace(/\s+/g, " ")
+            .trim();
+
+        if (!sanitizedNoteName) {
+            new Alert(
+                "Invalid Item Title",
+                "The selected task/project title cannot be converted to a valid Obsidian note name."
+            ).show();
+            return;
+        }
+
+        const normalizedFolderPath = (OBSIDIAN_FOLDER_PATH || "")
+            .trim()
+            .replace(/^\/+|\/+$/g, "");
+
+        const notePath = normalizedFolderPath
+            ? `${normalizedFolderPath}/${sanitizedNoteName}`
+            : sanitizedNoteName;
+
+        const encodedPath = encodeURIComponent(notePath);
+        const encodedVault = OBSIDIAN_VAULT_NAME ? `&vault=${encodeURIComponent(OBSIDIAN_VAULT_NAME)}` : "";
+
+        // obsidian://open does NOT support x-callback-url, so we cannot use it for
+        // "open or create" logic. Instead we use obsidian://new with append=true and
+        // no content:
+        //   • If the note already exists → Obsidian opens it and appends nothing
+        //     (no content passed), so the file is unchanged – no duplicate created.
+        //   • If the note does not exist → Obsidian creates it as a new empty note.
+        const openOrCreateURL = URL.fromString(
+            `obsidian://new?file=${encodedPath}${encodedVault}&append=true`
+        );
+
+        if (!openOrCreateURL) {
+            new Alert(
+                "URL Error",
+                "Could not build the Obsidian URI."
+            ).show();
+            return;
+        }
+
+        openOrCreateURL.open();
+        console.log(`Opened or created Obsidian note: ${notePath}`);
+    });
+
+    action.validate = function (selection, sender) {
+        const oneTaskSelected = selection.tasks.length === 1;
+        const oneProjectSelected = selection.tasks.length === 0 && selection.projects.length === 1;
+        return oneTaskSelected || oneProjectSelected;
+    };
+
+    return action;
+})();
